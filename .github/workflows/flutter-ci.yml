@@ -27,13 +27,37 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Run Flutter analyze
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Create reports folder
+        run: mkdir -p reports
 
-      - name: Run Flutter tests
+      - name: Run Flutter analyze and save report
+        run: |
+          set -o pipefail
+          flutter analyze --no-fatal-infos --no-fatal-warnings 2>&1 | tee reports/flutter_analyze_report.txt
+
+      - name: Run Flutter tests and save report
         run: |
           if [ -d "test" ] && [ "$(find test -name '*_test.dart' | wc -l)" -gt 0 ]; then
-            flutter test
+            flutter test 2>&1 | tee reports/flutter_test_report.txt
           else
-            echo "No tests found, skipping flutter test"
+            echo "No tests found, skipping flutter test" | tee reports/flutter_test_report.txt
           fi
+
+      - name: Create final CI summary report
+        run: |
+          echo "SavariGo Flutter CI Report" > reports/SavariGo_CI_Report.txt
+          echo "==========================" >> reports/SavariGo_CI_Report.txt
+          echo "" >> reports/SavariGo_CI_Report.txt
+          echo "Project Name: SavariGo" >> reports/SavariGo_CI_Report.txt
+          echo "Workflow: Flutter CI" >> reports/SavariGo_CI_Report.txt
+          echo "Branch: $GITHUB_REF_NAME" >> reports/SavariGo_CI_Report.txt
+          echo "Commit ID: $GITHUB_SHA" >> reports/SavariGo_CI_Report.txt
+          echo "" >> reports/SavariGo_CI_Report.txt
+          echo "Flutter analyze and test reports are attached in this artifact." >> reports/SavariGo_CI_Report.txt
+
+      - name: Upload CI Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: SavariGo-CI-Report
+          path: reports/
