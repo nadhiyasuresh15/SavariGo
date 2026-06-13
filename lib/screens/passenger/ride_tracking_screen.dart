@@ -1,5 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart';
+
 import '../../constants/app_colors.dart';
 import '../../constants/app_routes.dart';
 import '../../widgets/safety_button.dart';
@@ -14,6 +18,14 @@ class RideTrackingScreen extends StatefulWidget {
 class _RideTrackingScreenState extends State<RideTrackingScreen> {
   int _stage = 0;
   Timer? _timer;
+
+  LatLng? _userLocation;
+  bool _locationLoading = true;
+  String _locationMessage = 'Getting your current location...';
+
+  final LatLng _pickup = const LatLng(12.9249, 80.1000); // Tambaram
+  final LatLng _driver = const LatLng(12.9600, 80.1500); // Driver location
+  final LatLng _drop = const LatLng(13.0108, 80.2206); // Guindy
 
   static const List<String> _stages = [
     'Driver is on the way...',
@@ -32,6 +44,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
   @override
   void initState() {
     super.initState();
+    _getCurrentLocation();
 
     _timer = Timer.periodic(const Duration(seconds: 4), (_) {
       if (!mounted) return;
@@ -46,14 +59,210 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
     });
   }
 
+  Future<void> _getCurrentLocation() async {
+    try {
+      final bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+
+      if (!serviceEnabled) {
+        setState(() {
+          _locationLoading = false;
+          _locationMessage = 'Location service is OFF. Showing default pickup.';
+          _userLocation = _pickup;
+        });
+        return;
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        setState(() {
+          _locationLoading = false;
+          _locationMessage =
+              'Location permission denied. Showing default pickup.';
+          _userLocation = _pickup;
+        });
+        return;
+      }
+
+      final Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      setState(() {
+        _userLocation = LatLng(position.latitude, position.longitude);
+        _locationLoading = false;
+        _locationMessage =
+            'Your Location: ${position.latitude.toStringAsFixed(5)}, ${position.longitude.toStringAsFixed(5)}';
+      });
+    } catch (e) {
+      setState(() {
+        _locationLoading = false;
+        _locationMessage = 'Unable to fetch GPS. Showing default pickup.';
+        _userLocation = _pickup;
+      });
+    }
+  }
+
   @override
   void dispose() {
     _timer?.cancel();
     super.dispose();
   }
 
+  void _showPaymentDialog() {
+    String selectedPayment = 'UPI';
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Complete Payment'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Amount to Pay: ₹45',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.black,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  RadioListTile<String>(
+                    title: const Text('UPI Payment'),
+                    value: 'UPI',
+                    groupValue: selectedPayment,
+                    onChanged: (value) {
+                      setDialogState(() {
+                        selectedPayment = value ?? 'UPI';
+                      });
+                    },
+                  ),
+                  RadioListTile<String>(
+                    title: const Text('Card Payment'),
+                    value: 'Card',
+                    groupValue: selectedPayment,
+                    onChanged: (value) {
+                      setDialogState(() {
+                        selectedPayment = value ?? 'Card';
+                      });
+                    },
+                  ),
+                  RadioListTile<String>(
+                    title: const Text('Cash to Driver'),
+                    value: 'Cash',
+                    groupValue: selectedPayment,
+                    onChanged: (value) {
+                      setDialogState(() {
+                        selectedPayment = value ?? 'Cash';
+                      });
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.yellow,
+                    foregroundColor: AppColors.black,
+                  ),
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _showPaymentSuccess(selectedPayment);
+                  },
+                  child: const Text('Pay Now'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showPaymentSuccess(String method) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Payment Successful 🎉'),
+        content: Text(
+          'Payment of ₹45 completed using $method.\n\nTransaction ID: SG${DateTime.now().millisecondsSinceEpoch}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pushNamed(context, AppRoutes.feedback);
+            },
+            child: const Text('Give Feedback'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final LatLng currentCenter = _userLocation ?? _pickup;
+
+    final List<Marker> markers = [
+      Marker(
+        point: currentCenter,
+        width: 90,
+        height: 80,
+        child: _mapMarker(
+          icon: Icons.my_location,
+          color: Colors.blue,
+          label: 'You',
+        ),
+      ),
+      Marker(
+        point: _pickup,
+        width: 100,
+        height: 80,
+        child: _mapMarker(
+          icon: Icons.location_on,
+          color: AppColors.green,
+          label: 'Pickup',
+        ),
+      ),
+      Marker(
+        point: _driver,
+        width: 110,
+        height: 80,
+        child: _mapMarker(
+          icon: Icons.local_taxi,
+          color: AppColors.yellow,
+          label: 'Driver',
+          iconColor: AppColors.black,
+        ),
+      ),
+      Marker(
+        point: _drop,
+        width: 100,
+        height: 80,
+        child: _mapMarker(
+          icon: Icons.flag,
+          color: AppColors.red,
+          label: 'Drop',
+        ),
+      ),
+    ];
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -64,160 +273,114 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
       ),
       body: Column(
         children: [
-          // Web Map Demo UI
           Expanded(
             flex: 3,
-            child: Container(
-              width: double.infinity,
-              margin: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFFE8F0E9),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.black12),
-              ),
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: CustomPaint(
-                      painter: _MapGridPainter(),
+            child: Stack(
+              children: [
+                FlutterMap(
+                  options: MapOptions(
+                    initialCenter: currentCenter,
+                    initialZoom: 12.5,
+                  ),
+                  children: [
+                    TileLayer(
+                      urlTemplate:
+                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.savarigo.app',
                     ),
-                  ),
-
-                  Positioned.fill(
-                    child: CustomPaint(
-                      painter: _RoutePainter(),
-                    ),
-                  ),
-
-                  // Pickup
-                  Positioned(
-                    left: 45,
-                    bottom: 70,
-                    child: _mapPin(
-                      title: 'Pickup',
-                      place: 'Tambaram',
-                      color: AppColors.green,
-                      icon: Icons.location_on,
-                    ),
-                  ),
-
-                  // Driver
-                  AnimatedPositioned(
-                    duration: const Duration(seconds: 2),
-                    left: _stage < 2 ? 150 : 230,
-                    top: _stage < 2 ? 150 : 95,
-                    child: _driverPin(),
-                  ),
-
-                  // Drop
-                  Positioned(
-                    right: 50,
-                    top: 55,
-                    child: _mapPin(
-                      title: 'Drop',
-                      place: 'Guindy',
-                      color: AppColors.red,
-                      icon: Icons.flag,
-                    ),
-                  ),
-
-                  // ETA chip
-                  Positioned(
-                    top: 16,
-                    left: 16,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.black.withOpacity(0.78),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Text(
-                        '⏱️ ETA: 8 min',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13,
+                    PolylineLayer(
+                      polylines: [
+                        Polyline(
+                          points: [_pickup, _driver, _drop],
+                          strokeWidth: 5,
+                          color: AppColors.black,
                         ),
+                      ],
+                    ),
+                    MarkerLayer(markers: markers),
+                  ],
+                ),
+                Positioned(
+                  top: 16,
+                  left: 16,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.black.withOpacity(0.78),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Text(
+                      '⏱️ ETA: 8 min',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
                       ),
                     ),
                   ),
-
-                  // SOS button
-                  Positioned(
-                    top: 16,
-                    right: 16,
-                    child: SafetySOSButton(
-                      small: true,
-                      onPressed: () {
-                        Navigator.pushNamed(context, AppRoutes.safety);
-                      },
-                    ),
+                ),
+                Positioned(
+                  top: 16,
+                  right: 16,
+                  child: SafetySOSButton(
+                    small: true,
+                    onPressed: () {
+                      Navigator.pushNamed(context, AppRoutes.safety);
+                    },
                   ),
-
-                  // Web demo label
-                  Positioned(
-                    bottom: 12,
-                    left: 0,
-                    right: 0,
-                    child: Center(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.88),
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Colors.black12,
-                              blurRadius: 6,
-                            ),
-                          ],
-                        ),
-                        child: const Text(
-                          'Simulated Web Map View · Future: Google Maps Live GPS',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: AppColors.textMuted,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                ),
+                Positioned(
+                  bottom: 14,
+                  left: 14,
+                  right: 14,
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.92),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      _locationLoading
+                          ? '📍 Getting current location...'
+                          : '📍 $_locationMessage',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.black,
                       ),
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
 
-          // Status Card
           Expanded(
             flex: 2,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppColors.white,
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(24),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
-                    blurRadius: 12,
-                    offset: const Offset(0, -3),
+            child: SingleChildScrollView(
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.white,
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(24),
                   ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Text(
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.08),
+                      blurRadius: 12,
+                      offset: const Offset(0, -3),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    Text(
                       '${_icons[_stage]} ${_stages[_stage]}',
                       style: const TextStyle(
                         fontSize: 18,
@@ -226,146 +389,121 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
                       ),
                       textAlign: TextAlign.center,
                     ),
-                  ),
 
-                  const SizedBox(height: 14),
+                    const SizedBox(height: 10),
 
-                  // Progress dots
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(
-                      _stages.length,
-                      (index) => AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        margin: const EdgeInsets.symmetric(horizontal: 4),
-                        width: index == _stage ? 26 : 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: index <= _stage
-                              ? AppColors.yellow
-                              : AppColors.grey,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Driver details
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: AppColors.lightGrey,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Row(
-                      children: [
-                        const CircleAvatar(
-                          radius: 24,
-                          backgroundColor: AppColors.yellow,
-                          child: Text(
-                            'R',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 18,
-                              color: AppColors.black,
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(width: 12),
-
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Ravi Auto ⭐ 4.9',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 15,
-                                  color: AppColors.black,
-                                ),
-                              ),
-                              SizedBox(height: 3),
-                              Text(
-                                'TN-01-AB-1234 · Verified Driver',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.textMuted,
-                                ),
-                              ),
-                              SizedBox(height: 3),
-                              Text(
-                                'Pickup: Tambaram  →  Drop: Guindy',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.textMuted,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        Container(
-                          padding: const EdgeInsets.all(10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(
+                        _stages.length,
+                        (index) => AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          margin: const EdgeInsets.symmetric(horizontal: 4),
+                          width: index == _stage ? 26 : 10,
+                          height: 10,
                           decoration: BoxDecoration(
-                            color: AppColors.yellow.withOpacity(0.35),
+                            color: index <= _stage
+                                ? AppColors.yellow
+                                : AppColors.grey,
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Text(
-                            'OTP\n4521',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 13,
-                              color: AppColors.black,
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.lightGrey,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Row(
+                        children: [
+                          const CircleAvatar(
+                            radius: 23,
+                            backgroundColor: AppColors.yellow,
+                            child: Text(
+                              'R',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 18,
+                                color: AppColors.black,
+                              ),
                             ),
                           ),
-                        ),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Ravi Auto ⭐ 4.9',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                                SizedBox(height: 2),
+                                Text(
+                                  'TN-01-AB-1234 · Verified Driver',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.textMuted,
+                                  ),
+                                ),
+                                SizedBox(height: 2),
+                                Text(
+                                  'Pickup: Your Current Location → Drop: Guindy',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.textMuted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.all(9),
+                            decoration: BoxDecoration(
+                              color: AppColors.yellow.withOpacity(0.35),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Text(
+                              'OTP\n4521',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    Row(
+                      children: [
+                        _infoBox('Fare', '₹45', Colors.blue.shade100),
+                        const SizedBox(width: 10),
+                        _infoBox('Trust Score', '92%', Colors.green.shade100),
+                        const SizedBox(width: 10),
+                        _infoBox('Seats', '3/4', Colors.orange.shade100),
                       ],
                     ),
-                  ),
 
-                  const SizedBox(height: 12),
+                    const SizedBox(height: 12),
 
-                  Row(
-                    children: [
-                      _infoBox('Fare', '₹45', Colors.blue.shade100),
-                      const SizedBox(width: 10),
-                      _infoBox('Trust Score', '92%', Colors.green.shade100),
-                      const SizedBox(width: 10),
-                      _infoBox('Seats', '3/4', Colors.orange.shade100),
-                    ],
-                  ),
-
-                  const Spacer(),
-
-                  if (_stage == _stages.length - 1)
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.pushNamed(context, AppRoutes.feedback);
-                      },
-                      icon: const Icon(Icons.star),
-                      label: const Text('Rate Your Ride'),
-                      style: ElevatedButton.styleFrom(
-                        minimumSize: const Size(double.infinity, 48),
-                        backgroundColor: AppColors.yellow,
-                        foregroundColor: AppColors.black,
-                      ),
-                    )
-                  else
                     Row(
                       children: [
                         Expanded(
                           child: OutlinedButton.icon(
                             onPressed: () {},
                             icon: const Icon(Icons.share),
-                            label: const Text('Share Ride'),
-                            style: OutlinedButton.styleFrom(
-                              minimumSize: const Size(double.infinity, 46),
-                            ),
+                            label: const Text('Share'),
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -384,13 +522,27 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
                             ),
                             style: OutlinedButton.styleFrom(
                               side: const BorderSide(color: AppColors.red),
-                              minimumSize: const Size(double.infinity, 46),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _showPaymentDialog,
+                            icon: const Icon(Icons.payment),
+                            label: const Text('Pay'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.yellow,
+                              foregroundColor: AppColors.black,
                             ),
                           ),
                         ),
                       ],
                     ),
-                ],
+
+                    const SizedBox(height: 12),
+                  ],
+                ),
               ),
             ),
           ),
@@ -399,30 +551,32 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
     );
   }
 
-  Widget _mapPin({
-    required String title,
-    required String place,
-    required Color color,
+  Widget _mapMarker({
     required IconData icon,
+    required Color color,
+    required String label,
+    Color iconColor = Colors.white,
   }) {
     return Column(
-      mainAxisSize: MainAxisSize.min,
       children: [
         CircleAvatar(
-          radius: 22,
+          radius: 20,
           backgroundColor: color,
           child: Icon(
             icon,
-            color: Colors.white,
+            color: iconColor,
             size: 22,
           ),
         ),
         const SizedBox(height: 4),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 7,
+            vertical: 4,
+          ),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(7),
             boxShadow: const [
               BoxShadow(
                 color: Colors.black12,
@@ -431,52 +585,8 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
             ],
           ),
           child: Text(
-            '$title\n$place',
-            textAlign: TextAlign.center,
+            label,
             style: const TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-              color: AppColors.black,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _driverPin() {
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: AppColors.yellow,
-            shape: BoxShape.circle,
-            border: Border.all(color: AppColors.black, width: 2),
-            boxShadow: const [
-              BoxShadow(
-                color: Colors.black26,
-                blurRadius: 8,
-              ),
-            ],
-          ),
-          child: const Icon(
-            Icons.local_taxi,
-            color: AppColors.black,
-            size: 28,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Text(
-            'Driver\nRavi Auto',
-            textAlign: TextAlign.center,
-            style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w800,
               color: AppColors.black,
@@ -490,7 +600,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
   Widget _infoBox(String title, String value, Color color) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
+        padding: const EdgeInsets.symmetric(vertical: 8),
         decoration: BoxDecoration(
           color: color,
           borderRadius: BorderRadius.circular(12),
@@ -500,15 +610,15 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
             Text(
               title,
               style: const TextStyle(
-                fontSize: 12,
+                fontSize: 11,
                 color: AppColors.textMuted,
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             Text(
               value,
               style: const TextStyle(
-                fontSize: 16,
+                fontSize: 15,
                 fontWeight: FontWeight.w900,
                 color: AppColors.black,
               ),
@@ -518,88 +628,4 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
       ),
     );
   }
-}
-
-// Fake map grid painter for web demo
-class _MapGridPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final gridPaint = Paint()
-      ..color = const Color(0xFFD0DDD0)
-      ..strokeWidth = 0.7;
-
-    for (double x = 0; x < size.width; x += 45) {
-      canvas.drawLine(
-        Offset(x, 0),
-        Offset(x, size.height),
-        gridPaint,
-      );
-    }
-
-    for (double y = 0; y < size.height; y += 45) {
-      canvas.drawLine(
-        Offset(0, y),
-        Offset(size.width, y),
-        gridPaint,
-      );
-    }
-
-    final roadPaint = Paint()
-      ..color = Colors.white.withOpacity(0.8)
-      ..strokeWidth = 16
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-
-    final road1 = Path()
-      ..moveTo(size.width * 0.05, size.height * 0.78)
-      ..quadraticBezierTo(
-        size.width * 0.45,
-        size.height * 0.55,
-        size.width * 0.95,
-        size.height * 0.18,
-      );
-
-    final road2 = Path()
-      ..moveTo(size.width * 0.10, size.height * 0.25)
-      ..lineTo(size.width * 0.90, size.height * 0.85);
-
-    canvas.drawPath(road1, roadPaint);
-    canvas.drawPath(road2, roadPaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-// Yellow route painter
-class _RoutePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final routePaint = Paint()
-      ..color = AppColors.yellow
-      ..strokeWidth = 6
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-
-    final borderPaint = Paint()
-      ..color = AppColors.black
-      ..strokeWidth = 9
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-
-    final path = Path()
-      ..moveTo(size.width * 0.12, size.height * 0.75)
-      ..quadraticBezierTo(
-        size.width * 0.45,
-        size.height * 0.55,
-        size.width * 0.88,
-        size.height * 0.22,
-      );
-
-    canvas.drawPath(path, borderPaint);
-    canvas.drawPath(path, routePaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
