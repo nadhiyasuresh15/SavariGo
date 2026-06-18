@@ -1,10 +1,14 @@
-name: Appium E2E (generate Excel report)
+name: Appium E2E Generate Excel Report
 
 on:
   push:
+    branches:
+      - main
+      - master
     paths-ignore:
       - 'test/appium_e2e_report_latest.xlsx'
       - 'test/appium_e2e_report_*.xlsx'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -12,64 +16,52 @@ permissions:
 jobs:
   e2e:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: 'stable'
+          channel: stable
+          architecture: x64
 
       - name: Install Flutter dependencies
         run: flutter pub get
 
-      - name: Start Android emulator
+      - name: Build debug APK
+        run: flutter build apk --debug --no-shrink
+
+      - name: Start Android emulator, install APK, and run Appium tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 31
           arch: x86_64
           target: google_apis
-          emulator-options: '-no-window -no-audio -no-boot-anim'
+          emulator-options: -no-window -no-audio -no-boot-anim
+          script: |
+            adb devices
+            APK=build/app/outputs/flutter-apk/app-debug.apk
 
-      - name: Build debug APK
-        run: flutter build apk --debug --no-shrink
+            if [ -f "$APK" ]; then
+              adb install -r "$APK"
+            else
+              echo "APK not found: $APK"
+              exit 1
+            fi
 
-      - name: Install APK on emulator
-        run: |
-          APK=build/app/outputs/flutter-apk/app-debug.apk
-          if [ -f "$APK" ]; then
-            adb install -r "$APK"
-          else
-            echo "APK not found: $APK"
-            exit 1
-          fi
+            npm install -g appium
+            nohup appium --log appium.log &
 
-      - name: Install Node (for Appium) and start Appium
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-      - name: Start Appium server
-        run: |
-          npm install -g appium
-          nohup appium &> appium.log &
+            python -m pip install --upgrade pip
+            pip install -r test/requirements.txt
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-
-      - name: Install Python dependencies
-        run: python -m pip install --upgrade pip && pip install -r test/requirements.txt
-
-      - name: Run Appium E2E tests
-        env:
-          ANDROID_SERIAL: emulator-5554
-        run: |
-          python test/appium_e2e.py
+            python test/appium_e2e.py
 
       - name: Upload Excel reports
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: appium-e2e-reports
           path: |
@@ -77,12 +69,15 @@ jobs:
             test/appium_e2e_report_latest.xlsx
 
       - name: Commit reports back to repository
+        if: always()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
           git add test/appium_e2e_report_latest.xlsx || true
           git add test/appium_e2e_report_*.xlsx || true
+
           git commit -m "[skip ci] Auto-generated e2e report" || echo "No report changes to commit"
           git push origin HEAD:${{ github.ref_name }} || echo "Push failed or no permission"
