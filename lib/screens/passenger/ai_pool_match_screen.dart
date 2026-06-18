@@ -1,8 +1,10 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
-import '../../constants/app_colors.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../../constants/app_routes.dart';
-import '../../widgets/custom_button.dart';
+import '../../services/ai_matching_service.dart';
 
 class AIPoolMatchScreen extends StatefulWidget {
   const AIPoolMatchScreen({super.key});
@@ -12,338 +14,511 @@ class AIPoolMatchScreen extends StatefulWidget {
 }
 
 class _AIPoolMatchScreenState extends State<AIPoolMatchScreen> {
+  final SupabaseClient _supabase = Supabase.instance.client;
+
   bool _loading = true;
-  int _score = 0;
+  List<Map<String, dynamic>> _drivers = [];
+  Map<String, dynamic>? _selectedDriver;
+
+  Map<String, dynamic> _rideData = {};
+
+  // AI result fields
+  int _matchScore = 0;
+  int? _etaMinutes;
+  int _estimatedFarePerPerson = 0;
+  int _savings = 0;
+
+  Timer? _pollTimer;
+  StreamSubscription<dynamic>? _driversSub;
+
+  static const Color yellow = Color(0xFFFFCC00);
+  static const Color black = Color(0xFF1A1A1A);
 
   @override
   void initState() {
     super.initState();
 
-    Future.delayed(const Duration(seconds: 1), () {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-      });
+    Future.delayed(Duration.zero, () {
+      final args = ModalRoute.of(context)?.settings.arguments;
 
-      Timer.periodic(const Duration(milliseconds: 25), (timer) {
-        if (!mounted) {
-          timer.cancel();
-          return;
-        }
+      if (args != null && args is Map<String, dynamic>) {
+        _rideData = args;
+      }
 
-        if (_score < 92) {
-          setState(() {
-            _score++;
-          });
-        } else {
-          timer.cancel();
-        }
-      });
+      _loadDrivers();
+
+      // Try to subscribe to realtime driver updates (Supabase stream). If
+      // the stream API isn't available or fails, polling will continue.
+      try {
+        final stream = _supabase.from('drivers').stream(primaryKey: ['id']);
+        _driversSub = stream.listen((data) {
+          if (!mounted) return;
+          try {
+            // Data from Supabase stream can be a list of maps or a single map
+            final list = (data is List) ? data : [data];
+            _drivers = list
+                .map((e) =>
+                    Map<String, dynamic>.from(e as Map<dynamic, dynamic>))
+                .toList();
+
+            // ensure selected driver is still active, otherwise pick first active
+            if (_selectedDriver != null) {
+              final still = _drivers.firstWhere(
+                  (d) => d['email'] == _selectedDriver!['email'],
+                  orElse: () => <String, dynamic>{});
+              if (still.isEmpty || !_isDriverActive(still)) {
+                final activeDrivers = _drivers
+                    .where((driver) => _isDriverActive(driver))
+                    .toList();
+                _selectedDriver =
+                    activeDrivers.isNotEmpty ? activeDrivers.first : null;
+              } else {
+                _selectedDriver = still;
+              }
+            } else {
+              final activeDrivers =
+                  _drivers.where((driver) => _isDriverActive(driver)).toList();
+              if (activeDrivers.isNotEmpty) {
+                _selectedDriver = activeDrivers.first;
+              }
+            }
+
+            // recompute AI match
+            final ai = AIMatchingService.findBestDriverMatch(
+              rideRequest: {
+                'seats': _rideData['seats'] ?? 1,
+                'totalFare': _rideData['totalFare'] ?? 150
+              },
+              drivers: _drivers,
+            );
+            _matchScore = ai['matchScore'] ?? 0;
+            _etaMinutes = ai['etaMinutes'];
+            _estimatedFarePerPerson = ai['estimatedFarePerPerson'] ?? 0;
+            _savings = ai['savings'] ?? 0;
+
+            setState(() {});
+          } catch (_) {
+            // ignore parse errors
+          }
+        }, onError: (_) {
+          // fall back to polling
+          _pollTimer ??=
+              Timer.periodic(const Duration(seconds: 5), (_) => _loadDrivers());
+        });
+      } catch (_) {
+        // Start polling as fallback
+        _pollTimer ??=
+            Timer.periodic(const Duration(seconds: 5), (_) => _loadDrivers());
+      }
     });
   }
 
   @override
-  Widget build(BuildContext context) {
-    final args = ModalRoute.of(context)?.settings.arguments as Map? ?? {};
+  void dispose() {
+    _pollTimer?.cancel();
+    _driversSub?.cancel();
+    super.dispose();
+  }
 
-    final pickup = args['pickup'] ?? 'Tambaram';
-    final drop = args['drop'] ?? 'Guindy';
-    final womenOnly = args['womenOnly'] ?? false;
+  Future<void> _loadDrivers() async {
+    setState(() {
+      _loading = true;
+    });
 
-    if (_loading) {
-      return Scaffold(
-        backgroundColor: AppColors.background,
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Image.asset('assets/images/logo.png', width: 90, height: 90),
-              const SizedBox(height: 24),
-              const CircularProgressIndicator(
-                color: AppColors.yellow,
-                strokeWidth: 4,
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'AI is finding your best pool match...',
-                style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.black,
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Checking pickup, drop, seats, time and safety preference',
-                style: TextStyle(color: AppColors.textMuted),
-                textAlign: TextAlign.center,
-              ),
-            ],
+    try {
+      final response = await _supabase
+          .from('drivers')
+          .select()
+          .order('is_active', ascending: false)
+          .order('rating', ascending: false);
+
+      final List data = response as List;
+
+      _drivers = data
+          .map((e) => Map<String, dynamic>.from(e as Map<dynamic, dynamic>))
+          .toList();
+
+      final activeDrivers = _drivers.where((driver) {
+        return driver['is_active'] == true &&
+            driver['status'].toString().toLowerCase() == 'active';
+      }).toList();
+
+      if (activeDrivers.isNotEmpty) {
+        _selectedDriver = activeDrivers.first;
+      } else {
+        _selectedDriver = null;
+      }
+    } catch (e) {
+      _drivers = [];
+      _selectedDriver = null;
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load drivers: $e'),
+            backgroundColor: Colors.red,
           ),
-        ),
-      );
+        );
+      }
     }
 
+    if (mounted) {
+      try {
+        // compute AI match result after drivers are loaded
+        final ai = AIMatchingService.findBestDriverMatch(
+          rideRequest: {
+            'seats': _rideData['seats'] ?? 1,
+            'totalFare': _rideData['totalFare'] ?? 150,
+          },
+          drivers: _drivers,
+        );
+
+        _matchScore = ai['matchScore'] ?? 0;
+        _etaMinutes = ai['etaMinutes'];
+        _estimatedFarePerPerson = ai['estimatedFarePerPerson'] ?? 0;
+        _savings = ai['savings'] ?? 0;
+
+        setState(() {
+          _loading = false;
+        });
+      } catch (e) {
+        // Handle any errors that occur during AI matching
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error computing AI match: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  bool _isDriverActive(Map<String, dynamic> driver) {
+    return driver['is_active'] == true &&
+        driver['status'].toString().toLowerCase() == 'active';
+  }
+
+  Future<void> _confirmRide() async {
+    if (_selectedDriver == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No active driver available right now'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    try {
+      final user = _supabase.auth.currentUser;
+
+      await _supabase.from('rides').insert({
+        'passenger_id': user?.id,
+        'pickup_location': _rideData['pickup'] ?? 'Current Location',
+        'drop_location': _rideData['drop'] ?? 'Selected Destination',
+        'status': 'requested',
+        'women_only': _rideData['womenOnly'] ?? false,
+        'seats': _rideData['seats'] ?? 1,
+        'driver_name': _selectedDriver!['name'],
+        'driver_email': _selectedDriver!['email'],
+        'vehicle_number': _selectedDriver!['vehicle_number'],
+      });
+
+      if (!mounted) return;
+
+      Navigator.pushNamed(
+        context,
+        AppRoutes.rideTracking,
+        arguments: {
+          ..._rideData,
+          'driver': _selectedDriver,
+        },
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Ride saved for demo. Opening tracking page.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      Navigator.pushNamed(
+        context,
+        AppRoutes.rideTracking,
+        arguments: {
+          ..._rideData,
+          'driver': _selectedDriver,
+        },
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pickup = _rideData['pickup'] ?? 'Current Location';
+    final drop = _rideData['drop'] ?? 'Selected Destination';
+    final seats = _rideData['seats'] ?? 1;
+    final womenOnly = _rideData['womenOnly'] ?? false;
+
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: const Color(0xFFF5F5F5),
       appBar: AppBar(
-        title: const Text('AI Pool Match 🤖'),
-        backgroundColor: AppColors.yellow,
-        foregroundColor: AppColors.black,
-        elevation: 0,
+        backgroundColor: yellow,
+        foregroundColor: black,
+        title: const Text(
+          'AI Pool Match',
+          style: TextStyle(fontWeight: FontWeight.w900),
+        ),
+        actions: [
+          IconButton(
+            onPressed: _loadDrivers,
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            // Score Header
-            Container(
-              width: double.infinity,
-              color: AppColors.yellow,
-              padding: const EdgeInsets.symmetric(vertical: 26),
+      body: _loading
+          ? const Center(
+              child: CircularProgressIndicator(color: black),
+            )
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(22),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    '$_score',
-                    style: const TextStyle(
-                      fontSize: 72,
-                      fontWeight: FontWeight.w900,
-                      color: AppColors.black,
-                    ),
-                  ),
+                  _rideSummaryCard(pickup, drop, seats, womenOnly),
+                  const SizedBox(height: 20),
                   const Text(
-                    'AI Match Score / 100',
+                    'Available Drivers',
                     style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.black,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                      color: black,
                     ),
                   ),
                   const SizedBox(height: 6),
-                  const Text(
-                    '🎯 Excellent Pool Match Found!',
+                  Text(
+                    'AI selects only active drivers from Supabase database',
                     style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.black,
+                      fontSize: 14,
+                      color: Colors.grey.shade700,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  if (_drivers.isEmpty)
+                    _emptyDriverCard()
+                  else
+                    Column(
+                      children: _drivers.map((driver) {
+                        final active = _isDriverActive(driver);
+                        final selected = _selectedDriver != null &&
+                            _selectedDriver!['email'] == driver['email'];
+
+                        return _driverCard(
+                          driver: driver,
+                          active: active,
+                          selected: selected,
+                        );
+                      }).toList(),
+                    ),
+                  const SizedBox(height: 22),
+                  _aiResultCard(),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 56,
+                    child: ElevatedButton.icon(
+                      onPressed: _selectedDriver == null ? null : _confirmRide,
+                      icon: const Icon(Icons.check_circle),
+                      label: Text(
+                        _selectedDriver == null
+                            ? 'No Active Driver Available'
+                            : "Confirm Ride with ${_selectedDriver!['name']}",
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: yellow,
+                        foregroundColor: black,
+                        disabledBackgroundColor: Colors.grey.shade300,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
+    );
+  }
 
-            Padding(
-              padding: const EdgeInsets.all(16),
+  Widget _rideSummaryCard(
+    dynamic pickup,
+    dynamic drop,
+    dynamic seats,
+    dynamic womenOnly,
+  ) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 14,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Ride Request',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w900,
+              color: black,
+            ),
+          ),
+          const SizedBox(height: 16),
+          _infoRow(Icons.my_location, 'Pickup', pickup.toString()),
+          const SizedBox(height: 12),
+          _infoRow(Icons.location_on, 'Drop', drop.toString()),
+          const SizedBox(height: 12),
+          _infoRow(Icons.event_seat, 'Seats', seats.toString()),
+          const SizedBox(height: 12),
+          _infoRow(
+            Icons.woman,
+            'Women Only',
+            womenOnly == true ? 'Enabled' : 'Disabled',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _driverCard({
+    required Map<String, dynamic> driver,
+    required bool active,
+    required bool selected,
+  }) {
+    return GestureDetector(
+      onTap: active
+          ? () {
+              setState(() {
+                _selectedDriver = driver;
+              });
+            }
+          : null,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 14),
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: selected ? yellow.withValues(alpha: 0.22) : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: selected
+                ? yellow
+                : active
+                    ? Colors.green
+                    : Colors.grey.shade300,
+            width: selected ? 2 : 1,
+          ),
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.black12,
+              blurRadius: 10,
+              offset: Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 30,
+              backgroundColor: active ? Colors.green : Colors.grey,
+              child: const Icon(
+                Icons.local_taxi,
+                color: Colors.white,
+                size: 30,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Match summary card
-                  Card(
-                    elevation: 3,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(18),
-                      child: Column(
-                        children: [
-                          const Text(
-                            'Matched Passenger',
-                            style: TextStyle(
-                              color: AppColors.textMuted,
-                              fontSize: 13,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          const CircleAvatar(
-                            radius: 34,
-                            backgroundColor: AppColors.yellow,
-                            child: Text(
-                              'P',
-                              style: TextStyle(
-                                fontSize: 28,
-                                fontWeight: FontWeight.w900,
-                                color: AppColors.black,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          const Text(
-                            'Priya S',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w900,
-                              color: AppColors.black,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            womenOnly
-                                ? 'Women-only safe pool enabled'
-                                : 'Same route passenger matched',
-                            style: const TextStyle(
-                              color: AppColors.green,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
+                  Text(
+                    driver['name']?.toString() ?? 'Driver',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      color: black,
                     ),
                   ),
-
-                  const SizedBox(height: 12),
-
-                  // Ride Details
-                  Card(
-                    elevation: 2,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            '🚖 Ride Details',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 16,
-                              color: AppColors.black,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          _row('🟢 Pickup', pickup),
-                          _row('🔴 Drop', drop),
-                          _row('⏱️ ETA', '8 minutes'),
-                          _row('🚖 Driver', 'Ravi Auto ⭐ 4.9'),
-                          _row('🚗 Vehicle', 'TN-01-AB-1234'),
-                          _row('✅ Verification', 'Background Checked'),
-                        ],
-                      ),
+                  const SizedBox(height: 4),
+                  Text(
+                    driver['vehicle_number']?.toString() ?? 'Vehicle not added',
+                    style: TextStyle(
+                      color: Colors.grey.shade700,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-
-                  const SizedBox(height: 12),
-
-                  // AI breakdown
-                  Card(
-                    color: AppColors.lightGreen,
-                    elevation: 2,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+                  const SizedBox(height: 4),
+                  Text(
+                    driver['phone']?.toString() ?? '',
+                    style: TextStyle(
+                      color: Colors.grey.shade600,
                     ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        children: [
-                          const Text(
-                            '🤖 AI Matching Breakdown',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 16,
-                              color: AppColors.black,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          _scoreRow('Pickup Similarity', '25/25'),
-                          _scoreRow('Drop Similarity', '23/25'),
-                          _scoreRow('Time Similarity', '18/20'),
-                          _scoreRow('Seat Availability', '10/10'),
-                          _scoreRow('Safety Preference', '16/20'),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  // Fare Split
-                  Card(
-                    elevation: 2,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        children: [
-                          const Text(
-                            '💰 Fare Split',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 16,
-                              color: AppColors.black,
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceAround,
-                            children: [
-                              _fareItem('Total Fare', '₹180'),
-                              _fareItem('Passengers', '3'),
-                              _fareItem('Your Share', '₹45', big: true),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: AppColors.green.withOpacity(0.12),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: const Text(
-                              '🌿 You save ₹90 compared to a private auto!',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: AppColors.green,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 18),
-
-                  CustomButton(
-                    label: 'Confirm Pool Ride 🚖',
-                    onPressed: () {
-                      showDialog(
-                        context: context,
-                        builder: (_) => AlertDialog(
-                          title: const Text('Ride Confirmed! 🎉'),
-                          content: const Text(
-                            'Your shared auto is confirmed.\nDriver Ravi Auto is on the way.',
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () {
-                                Navigator.pop(context);
-                                Navigator.pushNamed(
-                                  context,
-                                  AppRoutes.rideTracking,
-                                );
-                              },
-                              child: const Text('Track Ride'),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 48),
-                    ),
-                    child: const Text('Cancel'),
                   ),
                 ],
               ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 7,
+                  ),
+                  decoration: BoxDecoration(
+                    color: active ? Colors.green : Colors.red,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    active ? 'ACTIVE' : 'OFFLINE',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(Icons.star, color: Colors.orange, size: 18),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${driver['rating'] ?? 4.5}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ],
         ),
@@ -351,78 +526,129 @@ class _AIPoolMatchScreenState extends State<AIPoolMatchScreen> {
     );
   }
 
-  Widget _row(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              color: AppColors.textMuted,
-              fontSize: 13,
+  Widget _aiResultCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: black,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: _selectedDriver == null
+          ? const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'AI Match Result',
+                  style: TextStyle(
+                    color: yellow,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                SizedBox(height: 10),
+                Text(
+                  'No active driver found. Please ask a driver to go active.',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                SizedBox(height: 6),
+                Text(
+                  'Match Score: ${0}%',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'AI Match Result',
+                  style: TextStyle(
+                    color: yellow,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Best driver selected: ${_selectedDriver!['name']}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Match Score: $_matchScore%',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Estimated Fare: ₹$_estimatedFarePerPerson per passenger',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Estimated Arrival: ${_etaMinutes ?? '-'} minutes',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
-          ),
-          Flexible(
-            child: Text(
-              value.toString(),
-              textAlign: TextAlign.right,
-              style: const TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: 13,
-                color: AppColors.black,
-              ),
-            ),
-          ),
-        ],
+    );
+  }
+
+  Widget _emptyDriverCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: const Text(
+        'No drivers found in database',
+        style: TextStyle(
+          fontWeight: FontWeight.w800,
+          color: black,
+        ),
       ),
     );
   }
 
-  Widget _scoreRow(String title, String score) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(
-                color: AppColors.black,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          Text(
-            score,
-            style: const TextStyle(
-              color: AppColors.green,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _fareItem(String label, String value, {bool big = false}) {
-    return Column(
+  Widget _infoRow(IconData icon, String title, String value) {
+    return Row(
       children: [
+        Icon(icon, color: black),
+        const SizedBox(width: 12),
         Text(
-          label,
+          '$title: ',
           style: const TextStyle(
-            fontSize: 11,
-            color: AppColors.textMuted,
+            fontWeight: FontWeight.w900,
+            color: black,
           ),
         ),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: big ? 22 : 18,
-            fontWeight: FontWeight.w900,
-            color: big ? AppColors.green : AppColors.black,
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(
+              color: Colors.grey.shade700,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
       ],

@@ -15,17 +15,19 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _driverCodeController = TextEditingController();
 
   bool _isLogin = true;
   bool _loading = false;
   bool _hidePassword = true;
 
+  String _selectedRole = 'passenger';
+
   static const Color yellow = Color(0xFFFFCC00);
   static const Color black = Color(0xFF1A1A1A);
   static const Color bg = Color(0xFFF5F5F5);
 
-  // After login/register, it will go directly to Book Ride page
-  static const String nextRoute = '/passenger/book-ride';
+  static const String driverCode = 'DRIVER123';
 
   @override
   void dispose() {
@@ -33,7 +35,30 @@ class _LoginScreenState extends State<LoginScreen> {
     _phoneController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _driverCodeController.dispose();
     super.dispose();
+  }
+
+  String _roleTitle(String role) {
+    if (role == 'passenger') return 'Passenger';
+    if (role == 'driver') return 'Driver';
+    return 'Admin';
+  }
+
+  IconData _roleIcon(String role) {
+    if (role == 'passenger') return Icons.person;
+    if (role == 'driver') return Icons.local_taxi;
+    return Icons.admin_panel_settings;
+  }
+
+  String _routeForRole(String role) {
+    if (role == 'driver') {
+      return '/driver/dashboard';
+    } else if (role == 'admin') {
+      return '/admin/dashboard';
+    } else {
+      return '/passenger/book-ride';
+    }
   }
 
   void _showMessage(String message, {bool error = false}) {
@@ -50,6 +75,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final phone = _phoneController.text.trim();
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
+    final code = _driverCodeController.text.trim();
 
     if (!_isLogin && name.isEmpty) {
       _showMessage('Please enter your full name', error: true);
@@ -71,6 +97,11 @@ class _LoginScreenState extends State<LoginScreen> {
       return false;
     }
 
+    if (!_isLogin && _selectedRole == 'driver' && code != driverCode) {
+      _showMessage('Invalid driver registration code', error: true);
+      return false;
+    }
+
     return true;
   }
 
@@ -87,8 +118,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (!mounted) return;
 
-      _showMessage('Login successful');
-      Navigator.pushReplacementNamed(context, nextRoute);
+      _showMessage('${_roleTitle(_selectedRole)} login successful');
+
+      Navigator.pushReplacementNamed(
+        context,
+        _routeForRole(_selectedRole),
+      );
     } on AuthException catch (e) {
       _showMessage(e.message, error: true);
     } catch (_) {
@@ -107,6 +142,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final phone = _phoneController.text.trim();
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
+    final role = _selectedRole;
 
     try {
       final AuthResponse response = await _supabase.auth.signUp(
@@ -115,7 +151,7 @@ class _LoginScreenState extends State<LoginScreen> {
         data: {
           'name': name,
           'phone': phone,
-          'role': 'passenger',
+          'role': role,
         },
       );
 
@@ -128,17 +164,19 @@ class _LoginScreenState extends State<LoginScreen> {
             'name': name,
             'email': email,
             'phone': phone,
-            'role': 'passenger',
+            'role': role,
           });
-        } catch (_) {
-          // If table columns are different, ignore for demo.
-        }
+        } catch (_) {}
       }
 
       if (!mounted) return;
 
-      _showMessage('Registration successful');
-      Navigator.pushReplacementNamed(context, nextRoute);
+      _showMessage('${_roleTitle(role)} registration successful');
+
+      Navigator.pushReplacementNamed(
+        context,
+        _routeForRole(role),
+      );
     } on AuthException catch (e) {
       _showMessage(e.message, error: true);
     } catch (_) {
@@ -213,7 +251,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 22),
 
                   const Text(
-                    'AI-Based Shared Auto-Rickshaw Pooling System\nfor Chennai and Semi-Urban India',
+                    'AI-Based Shared Auto-Rickshaw Pooling System\nfor Passenger, Driver and Admin Users',
                     style: TextStyle(
                       fontSize: 17,
                       height: 1.5,
@@ -224,14 +262,15 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   const SizedBox(height: 36),
 
-                  Wrap(
+                  const Wrap(
                     spacing: 14,
                     runSpacing: 14,
-                    children: const [
+                    children: [
+                      FeatureChip(icon: Icons.person, text: 'Passenger Booking'),
+                      FeatureChip(icon: Icons.local_taxi, text: 'Driver Panel'),
+                      FeatureChip(icon: Icons.admin_panel_settings, text: 'Admin Panel'),
                       FeatureChip(icon: Icons.groups, text: 'AI Pool Matching'),
-                      FeatureChip(icon: Icons.woman, text: 'Women-Only Mode'),
                       FeatureChip(icon: Icons.location_on, text: 'GPS Tracking'),
-                      FeatureChip(icon: Icons.payment, text: 'Easy Payment'),
                       FeatureChip(icon: Icons.sos, text: 'SOS Safety'),
                     ],
                   ),
@@ -239,7 +278,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   const Spacer(),
 
                   const Text(
-                    'Designed for students, office workers and daily passengers.',
+                    'One platform for passengers, drivers and administrators.',
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -257,7 +296,7 @@ class _LoginScreenState extends State<LoginScreen> {
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(30),
                 child: Container(
-                  width: 440,
+                  width: 460,
                   padding: const EdgeInsets.all(28),
                   decoration: BoxDecoration(
                     color: Colors.white,
@@ -308,8 +347,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
                       Text(
                         _isLogin
-                            ? 'Login to book and track your shared auto'
-                            : 'Register with your name, email and phone number',
+                            ? 'Login as Passenger, Driver or Admin'
+                            : 'Register as Passenger or Driver',
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                           color: Colors.grey,
@@ -333,7 +372,11 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
 
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 22),
+
+                      _roleDropdown(),
+
+                      const SizedBox(height: 14),
 
                       if (!_isLogin) ...[
                         _inputField(
@@ -343,6 +386,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           icon: Icons.person,
                         ),
                         const SizedBox(height: 14),
+
                         _inputField(
                           controller: _phoneController,
                           label: 'Phone Number',
@@ -390,6 +434,16 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
 
+                      if (!_isLogin && _selectedRole == 'driver') ...[
+                        const SizedBox(height: 14),
+                        _inputField(
+                          controller: _driverCodeController,
+                          label: 'Driver Registration Code',
+                          hint: 'Enter DRIVER123',
+                          icon: Icons.key,
+                        ),
+                      ],
+
                       const SizedBox(height: 24),
 
                       SizedBox(
@@ -415,8 +469,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                 )
                               : Text(
                                   _isLogin
-                                      ? 'Login to SavariGo'
-                                      : 'Register Now',
+                                      ? 'Login as ${_roleTitle(_selectedRole)}'
+                                      : 'Register as ${_roleTitle(_selectedRole)}',
                                   style: const TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w900,
@@ -431,6 +485,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         onPressed: () {
                           setState(() {
                             _isLogin = !_isLogin;
+                            if (!_isLogin && _selectedRole == 'admin') {
+                              _selectedRole = 'passenger';
+                            }
                           });
                         },
                         child: Text(
@@ -450,13 +507,15 @@ class _LoginScreenState extends State<LoginScreen> {
                         width: double.infinity,
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: yellow.withOpacity(0.18),
+                          color: yellow.withValues(alpha: 0.18),
                           borderRadius: BorderRadius.circular(14),
                         ),
                         child: Text(
                           _isLogin
-                              ? 'Use your registered email and password to continue.'
-                              : 'Your name, email and phone number will be saved securely for ride booking.',
+                              ? 'Admin is a fixed account. Only Passenger and Driver can register.'
+                              : _selectedRole == 'passenger'
+                                  ? 'Passenger can book rides and track shared autos.'
+                                  : 'Driver registration code for demo: DRIVER123',
                           textAlign: TextAlign.center,
                           style: const TextStyle(
                             fontSize: 12,
@@ -476,6 +535,55 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  Widget _roleDropdown() {
+    final items = _isLogin
+        ? const [
+            DropdownMenuItem(
+              value: 'passenger',
+              child: Text('Passenger / User'),
+            ),
+            DropdownMenuItem(
+              value: 'driver',
+              child: Text('Driver'),
+            ),
+            DropdownMenuItem(
+              value: 'admin',
+              child: Text('Admin'),
+            ),
+          ]
+        : const [
+            DropdownMenuItem(
+              value: 'passenger',
+              child: Text('Passenger / User'),
+            ),
+            DropdownMenuItem(
+              value: 'driver',
+              child: Text('Driver'),
+            ),
+          ];
+
+    return DropdownButtonFormField<String>(
+      initialValue: _selectedRole,
+      decoration: InputDecoration(
+        labelText: _isLogin ? 'Login Role' : 'Register Role',
+        prefixIcon: Icon(_roleIcon(_selectedRole)),
+        filled: true,
+        fillColor: Colors.grey.shade100,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+      ),
+      items: items,
+      onChanged: (value) {
+        if (value == null) return;
+        setState(() {
+          _selectedRole = value;
+          _driverCodeController.clear();
+        });
+      },
+    );
+  }
+
   Widget _toggleButton(String text, bool loginValue) {
     final selected = _isLogin == loginValue;
 
@@ -484,6 +592,9 @@ class _LoginScreenState extends State<LoginScreen> {
         onTap: () {
           setState(() {
             _isLogin = loginValue;
+            if (!_isLogin && _selectedRole == 'admin') {
+              _selectedRole = 'passenger';
+            }
           });
         },
         child: Container(
@@ -547,18 +658,18 @@ class FeatureChip extends StatelessWidget {
         vertical: 10,
       ),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.65),
+        color: Colors.white.withValues(alpha: 0.65),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.black12),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 18, color: Color(0xFF1A1A1A)),
-          SizedBox(width: 8),
+          Icon(icon, size: 18, color: const Color(0xFF1A1A1A)),
+          const SizedBox(width: 8),
           Text(
             text,
-            style: TextStyle(
+            style: const TextStyle(
               fontWeight: FontWeight.w800,
               color: Color(0xFF1A1A1A),
             ),

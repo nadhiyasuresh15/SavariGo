@@ -23,9 +23,65 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
   bool _locationLoading = true;
   String _locationMessage = 'Getting your current location...';
 
-  final LatLng _pickup = const LatLng(12.9249, 80.1000); // Tambaram
-  final LatLng _driver = const LatLng(12.9600, 80.1500); // Driver location
-  final LatLng _drop = const LatLng(13.0108, 80.2206); // Guindy
+  LatLng _pickup = const LatLng(12.9249, 80.1000); // Tambaram fallback
+  LatLng _driver = const LatLng(12.9249, 80.1000); // fallback to pickup
+  LatLng _drop = const LatLng(13.0108, 80.2206); // Guindy fallback
+  String _pickupLabel = 'Your Current Location';
+  String _dropLabel = 'Drop Location';
+  String _rideDriverName = 'Ravi Auto';
+  bool _routeInitialized = false;
+
+  double? _doubleValue(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value.toDouble();
+    if (value is double) return value;
+    return double.tryParse(value.toString());
+  }
+
+  LatLng _computeDriverLocation(LatLng pickup, LatLng drop) {
+    return LatLng(
+      pickup.latitude + (drop.latitude - pickup.latitude) * 0.18,
+      pickup.longitude + (drop.longitude - pickup.longitude) * 0.18,
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    if (_routeInitialized) return;
+
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is Map<String, dynamic>) {
+      final pickupLat = _doubleValue(args['pickupLat']);
+      final pickupLng = _doubleValue(args['pickupLng']);
+      final dropLat = _doubleValue(args['dropLat']);
+      final dropLng = _doubleValue(args['dropLng']);
+
+      if (pickupLat != null && pickupLng != null) {
+        _pickup = LatLng(pickupLat, pickupLng);
+      }
+      if (dropLat != null && dropLng != null) {
+        _drop = LatLng(dropLat, dropLng);
+      }
+
+      if (args['pickup'] is String) {
+        _pickupLabel = args['pickup'] as String;
+      }
+      if (args['drop'] is String) {
+        _dropLabel = args['drop'] as String;
+      }
+
+      if (args['driver'] is Map) {
+        _rideDriverName =
+            (args['driver'] as Map)['name']?.toString() ?? _rideDriverName;
+      }
+
+      _driver = _computeDriverLocation(_pickup, _drop);
+    }
+
+    _routeInitialized = true;
+  }
 
   static const List<String> _stages = [
     'Driver is on the way...',
@@ -309,7 +365,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
                       vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      color: AppColors.black.withOpacity(0.78),
+                      color: AppColors.black.withValues(alpha: 0.78),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: const Text(
@@ -339,7 +395,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
                   child: Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.92),
+                      color: Colors.white.withValues(alpha: 0.92),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
@@ -358,7 +414,6 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
               ],
             ),
           ),
-
           Expanded(
             flex: 2,
             child: SingleChildScrollView(
@@ -372,7 +427,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.08),
+                      color: Colors.black.withValues(alpha: 0.08),
                       blurRadius: 12,
                       offset: const Offset(0, -3),
                     ),
@@ -389,9 +444,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
                       ),
                       textAlign: TextAlign.center,
                     ),
-
                     const SizedBox(height: 10),
-
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: List.generate(
@@ -410,9 +463,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
                         ),
                       ),
                     ),
-
                     const SizedBox(height: 12),
-
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
@@ -434,29 +485,29 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
                             ),
                           ),
                           const SizedBox(width: 12),
-                          const Expanded(
+                          Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Ravi Auto ⭐ 4.9',
-                                  style: TextStyle(
+                                  '$_rideDriverName ⭐ 4.9',
+                                  style: const TextStyle(
                                     fontWeight: FontWeight.w800,
                                     fontSize: 15,
                                   ),
                                 ),
-                                SizedBox(height: 2),
-                                Text(
+                                const SizedBox(height: 2),
+                                const Text(
                                   'TN-01-AB-1234 · Verified Driver',
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: AppColors.textMuted,
                                   ),
                                 ),
-                                SizedBox(height: 2),
+                                const SizedBox(height: 2),
                                 Text(
-                                  'Pickup: Your Current Location → Drop: Guindy',
-                                  style: TextStyle(
+                                  'Pickup: $_pickupLabel → Drop: $_dropLabel',
+                                  style: const TextStyle(
                                     fontSize: 12,
                                     color: AppColors.textMuted,
                                   ),
@@ -467,7 +518,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
                           Container(
                             padding: const EdgeInsets.all(9),
                             decoration: BoxDecoration(
-                              color: AppColors.yellow.withOpacity(0.35),
+                              color: AppColors.yellow.withValues(alpha: 0.35),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: const Text(
@@ -482,9 +533,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
                         ],
                       ),
                     ),
-
                     const SizedBox(height: 10),
-
                     Row(
                       children: [
                         _infoBox('Fare', '₹45', Colors.blue.shade100),
@@ -494,9 +543,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
                         _infoBox('Seats', '3/4', Colors.orange.shade100),
                       ],
                     ),
-
                     const SizedBox(height: 12),
-
                     Row(
                       children: [
                         Expanded(
@@ -539,7 +586,6 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
                         ),
                       ],
                     ),
-
                     const SizedBox(height: 12),
                   ],
                 ),

@@ -63,10 +63,10 @@ class _WomenOnlyModeScreenState extends State<WomenOnlyModeScreen> {
 
           // Main toggle
           Card(child: Padding(padding: const EdgeInsets.all(16), child: Row(children: [
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('🛡️ Women-Only Mode', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-              const SizedBox(height: 4),
-              const Text('Match only with female passengers', style: TextStyle(
+            const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('🛡️ Women-Only Mode', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+              SizedBox(height: 4),
+              Text('Match only with female passengers', style: TextStyle(
                   color: AppColors.textMuted, fontSize: 12)),
             ])),
             Switch(value: _womenOnly, onChanged: _toggleWomenOnly,
@@ -97,9 +97,9 @@ class _WomenOnlyModeScreenState extends State<WomenOnlyModeScreen> {
 
             // Guardian mode toggle
             Card(child: Padding(padding: const EdgeInsets.all(14), child: Row(children: [
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('👁️ Guardian Mode', style: TextStyle(fontWeight: FontWeight.w700)),
-                const Text('Share live ride with trusted contact',
+              const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('👁️ Guardian Mode', style: TextStyle(fontWeight: FontWeight.w700)),
+                Text('Share live ride with trusted contact',
                     style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
               ])),
               Switch(value: _guardianMode, onChanged: (v) => setState(() => _guardianMode = v),
@@ -108,9 +108,9 @@ class _WomenOnlyModeScreenState extends State<WomenOnlyModeScreen> {
 
             // OTP toggle
             Card(child: Padding(padding: const EdgeInsets.all(14), child: Row(children: [
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('🔐 Ride OTP Verification', style: TextStyle(fontWeight: FontWeight.w700)),
-                const Text('Driver must enter OTP to start ride',
+              const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('🔐 Ride OTP Verification', style: TextStyle(fontWeight: FontWeight.w700)),
+                Text('Driver must enter OTP to start ride',
                     style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
               ])),
               Switch(value: _otpVerify, onChanged: (v) => setState(() => _otpVerify = v),
@@ -152,12 +152,12 @@ class _WomenOnlyModeScreenState extends State<WomenOnlyModeScreen> {
 
           if (!_womenOnly) ...[
             const SizedBox(height: 12),
-            Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(
+            const Card(child: Padding(padding: EdgeInsets.all(16), child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('About Pengal Mattum Mode', style: TextStyle(
+              Text('About Pengal Mattum Mode', style: TextStyle(
                   fontWeight: FontWeight.w800, fontSize: 15, color: AppColors.pink)),
-              const SizedBox(height: 10),
-              const Text(
+              SizedBox(height: 10),
+              Text(
                 'Enable this mode for a safer travel experience.\n\n'
                 'When enabled, you will only be pooled with other female passengers '
                 'and only verified drivers will be assigned to your rides.\n\n'

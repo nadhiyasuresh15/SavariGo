@@ -45,7 +45,7 @@ class ProfileScreen extends StatelessWidget {
                       color: AppColors.black,
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Text('🧍 Passenger', style: const TextStyle(
+                    child: const Text('🧍 Passenger', style: TextStyle(
                         color: AppColors.yellow, fontWeight: FontWeight.w700, fontSize: 12)),
                   ),
                 ],

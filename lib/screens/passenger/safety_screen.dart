@@ -44,11 +44,11 @@ class _SafetyScreenState extends State<SafetyScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: CustomScrollView(slivers: [
-        SliverAppBar(
+        const SliverAppBar(
           expandedHeight: 120,
           pinned: true,
           backgroundColor: AppColors.black,
-          flexibleSpace: const FlexibleSpaceBar(
+          flexibleSpace: FlexibleSpaceBar(
             title: Text('🛡️ Safety Center', style: TextStyle(color: AppColors.white)),
             centerTitle: true,
           ),

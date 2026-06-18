@@ -105,9 +105,9 @@ class ReportsScreen extends StatelessWidget {
                                   duration: const Duration(milliseconds: 600),
                                   width: 28,
                                   height: h,
-                                  decoration: BoxDecoration(
+                                  decoration: const BoxDecoration(
                                     color: AppColors.yellow,
-                                    borderRadius: const BorderRadius.vertical(
+                                    borderRadius: BorderRadius.vertical(
                                       top: Radius.circular(6),
                                     ),
                                   ),

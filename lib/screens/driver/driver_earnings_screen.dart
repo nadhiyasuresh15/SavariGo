@@ -21,9 +21,9 @@ class DriverEarningsScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: CustomScrollView(slivers: [
-        SliverAppBar(
+        const SliverAppBar(
           pinned: true, backgroundColor: AppColors.black, expandedHeight: 80,
-          flexibleSpace: const FlexibleSpaceBar(
+          flexibleSpace: FlexibleSpaceBar(
             title: Text('💰 Driver Earnings', style: TextStyle(color: AppColors.yellow)),
             centerTitle: true,
           ),
@@ -66,14 +66,14 @@ class DriverEarningsScreen extends StatelessWidget {
               color: AppColors.lightGreen, borderRadius: BorderRadius.circular(14),
               border: const Border(left: BorderSide(color: AppColors.green, width: 4)),
             ),
-            child: Column(children: [
-              const Text('🌿 Eco Impact This Week', style: TextStyle(
+            child: const Column(children: [
+              Text('🌿 Eco Impact This Week', style: TextStyle(
                   fontWeight: FontWeight.w800, color: AppColors.green, fontSize: 15)),
-              const SizedBox(height: 6),
-              const Text('25 shared rides', style: TextStyle(
+              SizedBox(height: 6),
+              Text('25 shared rides', style: TextStyle(
                   fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.green)),
-              const SizedBox(height: 4),
-              const Text('You helped reduce CO₂ emissions for Chennai! Thank you.',
+              SizedBox(height: 4),
+              Text('You helped reduce CO₂ emissions for Chennai! Thank you.',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 12, color: AppColors.green)),
             ]),

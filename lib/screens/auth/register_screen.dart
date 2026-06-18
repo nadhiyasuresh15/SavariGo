@@ -77,8 +77,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
           const SizedBox(height: 16),
 
           // Gender selector
-          Align(alignment: Alignment.centerLeft,
-              child: const Text('Gender', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13))),
+          const Align(alignment: Alignment.centerLeft,
+              child: Text('Gender', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13))),
           const SizedBox(height: 8),
           Wrap(spacing: 8, children: [
             for (final g in ['male', 'female', 'other'])
@@ -91,8 +91,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
           const SizedBox(height: 14),
 
           // Role selector
-          Align(alignment: Alignment.centerLeft,
-              child: const Text('I am a...', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13))),
+          const Align(alignment: Alignment.centerLeft,
+              child: Text('I am a...', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13))),
           const SizedBox(height: 8),
           Wrap(spacing: 8, children: [
             for (final r in ['passenger', 'driver'])
@@ -111,7 +111,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               decoration: BoxDecoration(
                 color: AppColors.lightPink,
                 borderRadius: BorderRadius.circular(10),
-                border: Border(left: const BorderSide(color: AppColors.pink, width: 4)),
+                border: const Border(left: BorderSide(color: AppColors.pink, width: 4)),
               ),
               child: const Text('👩 Pengal mattum mode available after login\nWomen-Only pooling mode will be enabled for you.',
                   style: TextStyle(fontSize: 12, color: AppColors.pink)),

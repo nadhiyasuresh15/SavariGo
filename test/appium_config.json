@@ -1,0 +1,21 @@
+{
+  "appiumServer": "http://localhost:4723/wd/hub",
+  "desiredCapabilities": {
+    "platformName": "Android",
+    "automationName": "UiAutomator2",
+    "deviceName": "Android Emulator",
+    "appPackage": "com.example.savarigo",
+    "appActivity": ".MainActivity",
+    "noReset": true
+  },
+  "stepDelay": 1,
+  "selectors": {
+    "login_button": "login_button_accessibility_id",
+    "passenger_home": "passenger_home_accessibility_id",
+    "book_ride_button": "book_ride_accessibility_id",
+    "confirm_ride_button": "confirm_ride_accessibility_id",
+    "complete_ride_button": "complete_ride_accessibility_id",
+    "ride_history_item": "ride_history_item_accessibility_id",
+    "logout_button": "logout_button_accessibility_id"
+  }
+}

@@ -19,8 +19,8 @@ class DriverProfileScreen extends StatelessWidget {
           color: AppColors.black,
           padding: const EdgeInsets.all(24),
           child: Column(children: [
-            CircleAvatar(radius: 40, backgroundColor: AppColors.yellow,
-                child: const Text('R', style: TextStyle(
+            const CircleAvatar(radius: 40, backgroundColor: AppColors.yellow,
+                child: Text('R', style: TextStyle(
                     fontSize: 32, fontWeight: FontWeight.w900, color: AppColors.black))),
             const SizedBox(height: 10),
             const Text('Ravi Auto', style: TextStyle(

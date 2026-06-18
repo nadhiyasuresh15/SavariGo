@@ -73,7 +73,7 @@ class AdminDashboardScreen extends StatelessWidget {
                     Navigator.pushNamed(context, AppRoutes.manageRides),
               ),
               const SizedBox(height: 10),
-              DashboardCard(
+              const DashboardCard(
                 icon: '✅',
                 label: 'Completed Rides',
                 value: '3',

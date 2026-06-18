@@ -83,15 +83,15 @@ class SavariGoApp extends StatelessWidget {
         inputDecorationTheme: InputDecorationTheme(
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: AppColors.grey),
+            borderSide: const BorderSide(color: AppColors.grey),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: AppColors.grey),
+            borderSide: const BorderSide(color: AppColors.grey),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: AppColors.yellow, width: 2),
+            borderSide: const BorderSide(color: AppColors.yellow, width: 2),
           ),
           filled: true,
           fillColor: const Color(0xFFFAFAFA),

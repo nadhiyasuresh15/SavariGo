@@ -395,7 +395,7 @@ class _BookRideScreenState extends State<BookRideScreen> {
 
                   const SizedBox(height: 20),
 
-                  Align(
+                  const Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
                       'Seats Required',
@@ -449,7 +449,7 @@ class _BookRideScreenState extends State<BookRideScreen> {
                       '👩 Women-Only Mode',
                       style: TextStyle(fontWeight: FontWeight.w800),
                     ),
-                    activeColor: AppColors.yellow,
+                    activeThumbColor: AppColors.yellow,
                     tileColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),

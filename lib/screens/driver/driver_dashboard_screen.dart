@@ -34,11 +34,11 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
               child: Row(children: [
                 Image.asset('assets/images/logo.png', width: 44, height: 44),
                 const SizedBox(width: 12),
-                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center, children: [
-                  const Text('Vanakkam, Ravi! 🙏',
+                  Text('Vanakkam, Ravi! 🙏',
                       style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.yellow)),
-                  const Text('TN-01-AB-1234 · ✅ Verified',
+                  Text('TN-01-AB-1234 · ✅ Verified',
                       style: TextStyle(fontSize: 11, color: Colors.white54)),
                 ])),
                 Container(

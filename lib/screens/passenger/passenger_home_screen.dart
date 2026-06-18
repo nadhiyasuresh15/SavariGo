@@ -28,11 +28,11 @@ class PassengerHomeScreen extends StatelessWidget {
               child: Row(children: [
                 Image.asset('assets/images/logo.png', width: 48, height: 48),
                 const SizedBox(width: 12),
-                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center, children: [
-                  Text(AppText.vanakkam, style: const TextStyle(
+                  Text(AppText.vanakkam, style: TextStyle(
                       fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.black)),
-                  Text(AppText.rideReady, style: const TextStyle(
+                  Text(AppText.rideReady, style: TextStyle(
                       fontSize: 12, color: AppColors.black)),
                 ])),
                 SafetySOSButton(small: true,
@@ -54,15 +54,15 @@ class PassengerHomeScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
                 border: const Border(left: BorderSide(color: AppColors.pink, width: 4)),
               ),
-              child: Row(children: [
-                const Text('👩', style: TextStyle(fontSize: 20)),
-                const SizedBox(width: 8),
-                const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              child: const Row(children: [
+                Text('👩', style: TextStyle(fontSize: 20)),
+                SizedBox(width: 8),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text('Pengal Mattum Mode', style: TextStyle(fontWeight: FontWeight.w800, color: AppColors.pink)),
                   Text('Women-Only Safe Pooling → Tap to enable',
                       style: TextStyle(fontSize: 11, color: AppColors.pink)),
                 ])),
-                const Icon(Icons.chevron_right, color: AppColors.pink),
+                Icon(Icons.chevron_right, color: AppColors.pink),
               ]),
             ),
           ),
